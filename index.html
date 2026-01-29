@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학습 사이트 연결 중...</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            padding: 40px;
+            max-width: 500px;
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .loader-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .status-detail {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .error-box {
+            display: none;
+            background: rgba(255, 100, 100, 0.2);
+            border: 1px solid rgba(255, 100, 100, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .error-box h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .error-box p {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .retry-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+
+        .retry-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .server-info {
+            display: none;
+            margin-top: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📚</div>
+        <h1>코딩 학습 사이트</h1>
+        <p class="subtitle">서버에 연결하는 중입니다...</p>
+
+        <div class="loader-box">
+            <div class="spinner" id="spinner"></div>
+            <p class="status" id="status">서버 정보 조회 중...</p>
+            <p class="status-detail" id="statusDetail">잠시만 기다려주세요</p>
+
+            <div class="error-box" id="errorBox">
+                <h3>⚠️ 연결 실패</h3>
+                <p id="errorMessage">서버에 연결할 수 없습니다.</p>
+                <button class="retry-btn" onclick="location.reload()">다시 시도</button>
+            </div>
+
+            <div class="server-info" id="serverInfo">
+                <p>서버 IP: <span id="serverIP">-</span></p>
+                <p>마지막 업데이트: <span id="lastUpdate">-</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 설정 =====
+        const CONFIG = {
+            // GitHub Gist URL (raw 형식)
+            // 형식: https://gist.githubusercontent.com/{username}/{gistId}/raw/{filename}
+            gistUrl: 'https://gist.githubusercontent.com/hss9205gtt/a7ecb5487868495a704b9fff238aa218/raw/server-ip.json',
+
+            // 연결 테스트 타임아웃 (ms)
+            timeout: 5000,
+
+            // 재시도 횟수
+            maxRetries: 3,
+
+            // 재시도 간격 (ms)
+            retryDelay: 2000
+        };
+
+        // ===== 상태 업데이트 =====
+        function updateStatus(message, detail = '') {
+            document.getElementById('status').textContent = message;
+            document.getElementById('statusDetail').textContent = detail;
+        }
+
+        function showError(message) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        function showServerInfo(ip, updatedAt) {
+            document.getElementById('serverInfo').style.display = 'block';
+            document.getElementById('serverIP').textContent = ip;
+            document.getElementById('lastUpdate').textContent = new Date(updatedAt).toLocaleString('ko-KR');
+        }
+
+        // ===== 서버 IP 조회 =====
+        async function fetchServerIP() {
+            updateStatus('서버 정보 조회 중...', 'GitHub에서 IP 정보를 가져오는 중');
+
+            try {
+                // 캐시 방지를 위한 타임스탬프 추가
+                const url = `${CONFIG.gistUrl}?t=${Date.now()}`;
+                const response = await fetch(url, {
+                    cache: 'no-store'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.ip || !data.port) {
+                    throw new Error('서버 정보가 올바르지 않습니다');
+                }
+
+                showServerInfo(data.ip, data.updatedAt);
+
+                return {
+                    ip: data.ip,
+                    port: data.port,
+                    url: data.url || `http://${data.ip}:${data.port}`
+                };
+
+            } catch (error) {
+                throw new Error(`서버 정보 조회 실패: ${error.message}`);
+            }
+        }
+
+        // ===== 서버 연결 테스트 =====
+        async function testConnection(serverUrl) {
+            updateStatus('서버 연결 테스트 중...', serverUrl);
+
+            return new Promise((resolve, reject) => {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error('연결 시간 초과'));
+                }, CONFIG.timeout);
+
+                // 서버의 health check 엔드포인트 호출
+                fetch(`${serverUrl}/api/health`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    mode: 'cors'
+                })
+                .then(response => {
+                    clearTimeout(timeoutId);
+                    if (response.ok) {
+                        resolve(true);
+                    } else {
+                        reject(new Error(`서버 응답 오류: ${response.status}`));
+                    }
+                })
+                .catch(error => {
+                    clearTimeout(timeoutId);
+                    if (error.name === 'AbortError') {
+                        reject(new Error('연결 시간 초과'));
+                    } else {
+                        reject(new Error(`연결 실패: ${error.message}`));
+                    }
+                });
+            });
+        }
+
+        // ===== 메인 로직 =====
+        async function connect() {
+            let lastError = null;
+
+            for (let attempt = 1; attempt <= CONFIG.maxRetries; attempt++) {
+                try {
+                    updateStatus(`연결 시도 중... (${attempt}/${CONFIG.maxRetries})`);
+
+                    // 1. 서버 IP 조회
+                    const serverInfo = await fetchServerIP();
+
+                    // 2. 연결 테스트
+                    await testConnection(serverInfo.url);
+
+                    // 3. 성공 - 리다이렉트
+                    updateStatus('연결 성공!', '페이지를 이동합니다...');
+                    setTimeout(() => {
+                        window.location.href = serverInfo.url;
+                    }, 500);
+                    return;
+
+                } catch (error) {
+                    lastError = error;
+                    console.error(`연결 시도 ${attempt} 실패:`, error);
+
+                    if (attempt < CONFIG.maxRetries) {
+                        updateStatus(
+                            `연결 실패, 재시도 중...`,
+                            `${CONFIG.retryDelay / 1000}초 후 다시 시도합니다 (${attempt}/${CONFIG.maxRetries})`
+                        );
+                        await new Promise(r => setTimeout(r, CONFIG.retryDelay));
+                    }
+                }
+            }
+
+            // 모든 시도 실패
+            showError(lastError.message + '\n\n서버가 꺼져 있거나 네트워크 문제일 수 있습니다.');
+        }
+
+        // 페이지 로드 시 연결 시작
+        document.addEventListener('DOMContentLoaded', connect);
+    </script>
+</body>
+</html>
