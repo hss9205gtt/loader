@@ -72,3 +72,7 @@ Assets/
 ## 글꼴 라이선스
 
 `KoreanFont.ttf` 는 Google Fonts의 [주아(Jua)](https://fonts.google.com/specimen/Jua) 글꼴이며 SIL Open Font License 1.1을 따릅니다 (`Assets/Licenses/Jua-Font-OFL.txt`).
+
+## 브라우저 미리보기
+
+`WebPreview/index.html` 은 같은 규칙을 three.js로 옮긴 미리보기입니다. 유니티 없이 브라우저에서 바로 열어 놀아볼 수 있습니다 (인터넷 연결 필요).
