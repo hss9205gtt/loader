@@ -1,0 +1,541 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style></head><body><title>숫자 블록 친구들</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<style>
+/* 한 화면 놀이판: 3D 캔버스가 화면을 채우고, 큰 버튼은 네 모서리에 떠 있다 (단일 하늘색 세계) */
+:root {
+  --sky: #bde6ff;
+  --grass: #a8e6a1;
+  --ink: #2b2e42;
+  --one: #ff5a5f;
+  --parent: #5c6b99;
+  --mission: #8a33bf;
+  --paper: #ffffff;
+  --display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  background: var(--sky); color: var(--ink);
+  font-family: var(--display);
+  overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+#stage { position: fixed; inset: 0; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+.hud { position: fixed; z-index: 2; }
+button {
+  font-family: var(--display); color: var(--paper); border: 0; cursor: pointer;
+  border-radius: 22px; box-shadow: 0 6px 0 rgba(0,0,0,.22);
+  transition: transform .08s;
+}
+button:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.22); }
+button:focus-visible { outline: 4px solid var(--ink); outline-offset: 3px; }
+#plus {
+  left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--one); font-size: clamp(34px, 8vmin, 64px); padding: .25em .7em;
+}
+#reset { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+#max { left: calc(16px + env(safe-area-inset-left, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); }
+#mode { right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); }
+.small { background: var(--parent); font-size: clamp(15px, 3.4vmin, 24px); padding: .45em .9em; }
+#mission {
+  left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px));
+  font-size: clamp(20px, 5vmin, 40px); color: var(--mission); white-space: nowrap;
+  text-shadow: 2px 2px 0 var(--paper); pointer-events: none;
+}
+#say {
+  left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + clamp(56px, 13vmin, 110px));
+  text-align: center; pointer-events: none; transition: opacity .4s;
+  text-shadow: 3px 3px 0 var(--paper);
+}
+#say .big { font-size: clamp(34px, 9vmin, 76px); line-height: 1.1; font-variant-numeric: tabular-nums; }
+#say .sm { font-size: clamp(18px, 4.6vmin, 38px); }
+#help {
+  left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  font-size: clamp(12px, 2.6vmin, 17px); color: var(--ink); opacity: .75; text-align: center;
+  pointer-events: none; width: min(58vw, 560px); line-height: 1.4;
+}
+#start {
+  position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 18px;
+  align-items: center; justify-content: center; background: rgba(189,230,255,.82);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  text-align: center;
+}
+#start h1 { margin: 0; font-weight: 400; font-size: clamp(36px, 9vmin, 80px); color: var(--ink); text-wrap: balance; }
+#start p { margin: 0; font-size: clamp(15px, 3.6vmin, 24px); max-width: 30em; }
+#go { background: var(--one); font-size: clamp(28px, 7vmin, 52px); padding: .3em 1.2em; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+@media (max-height: 420px), (max-width: 700px) { #help { display: none; } }
+</style>
+
+<div id="stage"></div>
+<div id="mission" class="hud"></div>
+<div id="say" class="hud"><div class="big"></div><div class="sm"></div></div>
+<button id="plus" class="hud" aria-label="하나 블록 더 만들기">+ 1</button>
+<button id="reset" class="hud small">처음부터</button>
+<button id="max" class="hud small">5까지</button>
+<button id="mode" class="hud small">미션 놀이</button>
+<div id="help" class="hud">톡: 세기 · 끌어서 위에 놓기: 합치기 · 꾹 누르기: 하나 떼기</div>
+<div id="start">
+  <h1>숫자 블록 친구들</h1>
+  <p>블록을 끌어서 합치고, 꾹 눌러서 나누고, 톡 눌러서 세어 봐요.</p>
+  <button id="go">놀이 시작!</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+// ---------- 숫자 정보 (Unity NumberInfo.cs와 같음) ----------
+const MAX = 10;
+const COLORS = [0x999999, 0xFF5A5F, 0xFF9F1C, 0xFFD23F, 0x5BC85B, 0x3FA9F5, 0x5A6FF0, 0xA66CFF, 0xFF6FB5, 0x2EC4B6, 0xF2F2F2];
+const WORDS = ['', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
+const word = n => WORDS[n] || String(n);
+const wordTopic = n => word(n) + (n === 1 ? '는' : '은');
+const wordObject = n => word(n) + (n === 1 ? '를' : '을');
+
+// ---------- 3D 기본 ----------
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbde6ff);
+const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x88aa88, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+sun.position.set(-6, 12, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 40 });
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), new THREE.MeshLambertMaterial({ color: 0xa8e6a1 }));
+floor.rotation.x = -Math.PI / 2; floor.position.z = -10; floor.receiveShadow = true;
+scene.add(floor);
+
+// 모서리가 둥근 큐브 (Unity Art.BuildRoundedCube와 같은 방법)
+function roundedCube(size, radius, grid) {
+  const h = size / 2, inner = h - radius, pos = [], nor = [], idx = [];
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  for (const n of [V(0,1,0), V(0,-1,0), V(-1,0,0), V(1,0,0), V(0,0,1), V(0,0,-1)]) {
+    const u = Math.abs(n.y) > 0.5 ? V(1,0,0) : V(0,1,0);
+    const v = new THREE.Vector3().crossVectors(n, u);
+    const start = pos.length / 3;
+    for (let y = 0; y <= grid; y++) for (let x = 0; x <= grid; x++) {
+      const p = n.clone().multiplyScalar(h)
+        .addScaledVector(u, (x / grid - 0.5) * size).addScaledVector(v, (y / grid - 0.5) * size);
+      const core = V(THREE.MathUtils.clamp(p.x, -inner, inner), THREE.MathUtils.clamp(p.y, -inner, inner), THREE.MathUtils.clamp(p.z, -inner, inner));
+      const d = p.clone().sub(core).normalize();
+      const q = core.addScaledVector(d, radius);
+      pos.push(q.x, q.y, q.z); nor.push(d.x, d.y, d.z);
+    }
+    for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) {
+      const i = start + y * (grid + 1) + x, r = i + 1, up = i + grid + 1, ur = up + 1;
+      idx.push(i, r, up, r, ur, up);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return g;
+}
+const CUBE = roundedCube(1, 0.16, 6);
+const SPHERE = new THREE.SphereGeometry(0.5, 20, 14);
+const mats = new Map();
+function mat(hex) {
+  if (!mats.has(hex)) mats.set(hex, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.55, metalness: 0 }));
+  return mats.get(hex);
+}
+const lerpHex = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t).getHex();
+function part(parent, geo, hex, x, y, z, sx, sy, sz, shadow) {
+  const m = new THREE.Mesh(geo, mat(hex));
+  m.position.set(x, y, z); m.scale.set(sx, sy, sz);
+  if (shadow) m.castShadow = true;
+  parent.add(m);
+  return m;
+}
+function labelSprite(text) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.font = '96px Jua, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 12; g.strokeStyle = '#ffffff'; g.strokeText(text, 64, 70);
+  g.fillStyle = '#2b2e42'; g.fillText(text, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
+  s.scale.set(1.1, 1.1, 1);
+  return s;
+}
+
+// ---------- 블록 캐릭터 (Unity NumberBlock.cs와 같음) ----------
+class Block {
+  constructor(value, x, z) {
+    this.value = value;
+    this.cols = Math.floor((value - 1) / 5) + 1;
+    this.rows = Math.min(value, 5);
+    this.width = this.cols;
+    this.root = new THREE.Group(); this.root.position.set(x, 0, z);
+    this.body = new THREE.Group(); this.root.add(this.body);
+    this.phase = Math.random() * 10; this.blinkAt = now + 1.5 + Math.random() * 2.5;
+    this.lift = 0; this.dragging = false; this.anim = null; this.count = null;
+    const base = COLORS[value], light = lerpHex(base, 0xffffff, 0.18);
+    this.cubes = [];
+    for (let i = 0; i < value; i++) {
+      const col = Math.floor(i / 5), row = i % 5, x0 = col - (this.cols - 1) / 2;
+      this.cubes.push(part(this.body, CUBE, i % 2 === 0 ? base : light, x0, row + 0.5, 0, .96, .96, .96, true));
+    }
+    // 얼굴: 첫째 줄 맨 위 큐브 앞면(카메라 쪽 +z)
+    const fx = -(this.cols - 1) / 2;
+    const face = new THREE.Group(); face.position.set(fx, this.rows - 0.5, 0.5); this.body.add(face);
+    this.eyes = new THREE.Group(); this.eyes.position.y = 0.1; face.add(this.eyes);
+    for (const sx of [-0.19, 0.19]) {
+      part(this.eyes, SPHERE, 0xffffff, sx, 0, 0.01, .26, .3, .1);
+      part(this.eyes, SPHERE, 0x1f1f29, sx, -0.02, 0.06, .12, .15, .05);
+      part(this.eyes, SPHERE, 0xffffff, sx - 0.03, 0.02, 0.09, .04, .04, .02);
+    }
+    for (let k = -2; k <= 2; k++) part(face, SPHERE, 0x1f1f29, k * 0.065, -0.2 + 0.012 * k * k, 0.03, .07, .07, .04);
+    const cheek = lerpHex(0xff8ca6, base, 0.25);
+    for (const sx of [-0.31, 0.31]) part(face, SPHERE, cheek, sx, -0.12, 0.02, .13, .08, .03);
+    const armHex = lerpHex(base, 0x000000, 0.15);
+    this.arms = [-1, 1].map(side => {
+      const p = new THREE.Group();
+      const ax = (side < 0 ? fx - 0.5 : -fx + 0.5) + side * 0.08;
+      p.position.set(ax, this.rows - 0.75, 0); p.rotation.z = side * 0.44;
+      part(p, CUBE, armHex, side * 0.08, -0.2, 0, .18, .42, .18, true);
+      this.body.add(p); p.userData.side = side;
+      return p;
+    });
+    this.label = labelSprite(String(value)); this.label.position.y = this.rows + 0.75; this.root.add(this.label);
+    // 손가락으로 집는 상자
+    this.hit = new THREE.Mesh(new THREE.BoxGeometry(this.cols, this.rows, 1), new THREE.MeshBasicMaterial({ visible: false }));
+    this.hit.position.y = this.rows / 2; this.hit.userData.block = this; this.root.add(this.hit);
+    scene.add(this.root);
+  }
+  get pos() { return this.root.position; }
+  dispose() { scene.remove(this.root); this.label.material.map.dispose(); this.label.material.dispose(); this.hit.geometry.dispose(); }
+  play(gen) { this.anim = gen; this.resetBody(); }
+  resetBody() {
+    this.body.scale.set(1, 1, 1); this.body.position.set(0, 0, 0); this.body.rotation.set(0, 0, 0);
+    this.arms.forEach(a => a.rotation.z = a.userData.side * 0.44);
+  }
+  stopCount() { this.count = null; this.cubes.forEach(c => c.scale.setScalar(.96)); }
+  update(dt) {
+    this.lift = moveTowards(this.lift, this.dragging ? 0.6 : 0, dt * 4);
+    this.root.position.y = this.lift;
+    if (this.anim) {
+      if (this.anim.next(dt).done) { this.anim = null; this.resetBody(); }
+    } else {
+      const s = 0.025 * Math.sin(now * 2.2 + this.phase);
+      this.body.scale.set(1 + s, 1 - s, 1 + s);
+    }
+    if (this.count && this.count.next(dt).done) this.count = null;
+    if (now > this.blinkAt) {
+      const t = now - this.blinkAt;
+      this.eyes.scale.y = t < 0.12 ? 0.1 : 1;
+      if (t >= 0.12) this.blinkAt = now + 2 + Math.random() * 3;
+    }
+  }
+}
+const moveTowards = (a, b, d) => Math.abs(b - a) <= d ? b : a + Math.sign(b - a) * d;
+
+// 애니메이션 = dt를 받는 제너레이터 (Unity 코루틴과 같은 구조)
+function* tween(dur, f) { let t = 0; while (t < dur) { f(t / dur); t += yield; } f(1); }
+function* popAnim(b) {
+  yield* tween(0.45, k => {
+    let s = 1 + Math.sin(k * Math.PI * 2.5) * (1 - k) * 0.35;
+    s *= THREE.MathUtils.smoothstep(Math.min(1, k * 3), 0, 1) * 0.7 + 0.3;
+    b.body.scale.setScalar(s);
+  });
+}
+function* jumpAnim(b, times, height, wave) {
+  for (let j = 0; j < times; j++) {
+    yield* tween(0.1, k => b.body.scale.set(1 + .15 * k, 1 - .2 * k, 1 + .15 * k));
+    yield* tween(0.4, k => {
+      b.body.position.y = 4 * height * k * (1 - k);
+      const st = 0.12 * Math.sin(k * Math.PI); b.body.scale.set(1 - st, 1 + st, 1 - st);
+      if (wave) { const w = 1.05 + Math.sin(now * 25) * 0.7; b.arms[0].rotation.z = -(w + .44); b.arms[1].rotation.z = w + .44; }
+    });
+    b.body.position.y = 0;
+    yield* tween(0.12, k => { const q = 1 - k; b.body.scale.set(1 + .12 * q, 1 - .15 * q, 1 + .12 * q); });
+  }
+}
+function* shakeAnim(b) { yield* tween(0.6, k => b.body.rotation.y = Math.sin(k * 0.6 * 30) * 0.31 * (1 - k)); }
+function* countAnim(b, onEach, onDone) {
+  for (let i = 0; i < b.cubes.length; i++) {
+    onEach(i + 1);
+    yield* tween(0.45, k => b.cubes[i].scale.setScalar(.96 + .3 * Math.sin(k * Math.PI)));
+  }
+  onDone();
+}
+
+// ---------- 소리: 숫자는 한국어 음성(가능하면), 효과음은 합성 ----------
+let audio = null;
+function tone(freq, dur, type = 'sine', vol = 0.25, slideTo) {
+  if (!audio) return;
+  const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
+}
+const NOTES = [0, 523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568, 1760];
+const sfx = {
+  pop: () => tone(400, 0.12, 'sine', 0.3, 900),
+  boing: () => { tone(260, 0.35, 'triangle', 0.3, 140); },
+  whoosh: () => tone(900, 0.15, 'triangle', 0.08, 300),
+  number: n => tone(NOTES[Math.min(n, 10)], 0.25, 'sine', 0.22),
+  success: () => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => setTimeout(() => tone(f, 0.25, 'sine', 0.25), i * 140)),
+};
+let koVoice = null;
+function pickVoice() {
+  try { koVoice = speechSynthesis.getVoices().find(v => /^ko/i.test(v.lang)) || null; } catch (e) { koVoice = null; }
+}
+try { speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); } catch (e) { /* 음성 없음 */ }
+function speak(text) {
+  if (!koVoice) return false;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.voice = koVoice; u.lang = koVoice.lang; u.rate = 0.95; u.pitch = 1.3;
+    speechSynthesis.speak(u); return true;
+  } catch (e) { return false; }
+}
+
+// ---------- 게임 (Unity GameManager.cs와 같은 규칙) ----------
+const LONG_PRESS = 0.8, MAX_CUBES = 20;
+let blocks = [], maxValue = 5, missionMode = true, target = 0, targetDone = false, jobs = [];
+let xMin = -5, xMax = 5, zMin = -3, zMax = 1, now = 0;
+const el = id => document.getElementById(id);
+const sayBig = document.querySelector('#say .big'), saySm = document.querySelector('#say .sm');
+let sayTimer = 0;
+function say(big, small) {
+  sayBig.textContent = big; saySm.textContent = small; el('say').style.opacity = 1; sayTimer = 3;
+}
+function after(sec, f) { jobs.push({ t: now + sec, f }); }
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function floorAt(nx, ny) {
+  ndc.set(nx, ny); ray.setFromCamera(ndc, cam);
+  const p = new THREE.Vector3(); return ray.ray.intersectPlane(ground, p) ? p : null;
+}
+function fit() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h); cam.aspect = w / h;
+  const zoom = cam.aspect < 1.5 ? 1.5 / cam.aspect : 1;
+  const look = new THREE.Vector3(0, 1.6, -1.5);
+  cam.position.copy(look).add(new THREE.Vector3(0, 5, 10.5).multiplyScalar(zoom));
+  cam.lookAt(look); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+  const l = floorAt(-0.88, -0.52), r = floorAt(0.88, -0.52);
+  if (l && r) { xMin = l.x + 0.3; xMax = r.x - 0.3; zMax = l.z - 0.6; zMin = zMax - 3.5; }
+}
+function clampPos(p, b) {
+  const half = b.width / 2;
+  p.x = THREE.MathUtils.clamp(p.x, xMin + half, Math.max(xMin + half, xMax - half));
+  p.z = THREE.MathUtils.clamp(p.z, zMin, zMax);
+  return p;
+}
+function spawn(value, x, z) {
+  const b = new Block(value, x, z);
+  clampPos(b.pos, b); b.play(popAnim(b)); blocks.push(b); return b;
+}
+function remove(b) { blocks = blocks.filter(o => o !== b); }
+
+function onTap(b) {
+  b.count = countAnim(b,
+    i => { if (!speak(word(i))) sfx.number(i); say(String(i), word(i)); },
+    () => { say(String(b.value), '모두 ' + word(b.value) + '!'); b.play(jumpAnim(b, 1, 0.9)); });
+}
+function onDrop(a) {
+  let best = null, bestD = Infinity;
+  for (const b of blocks) {
+    if (b === a) continue;
+    const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
+    if (Math.abs(dx) > (a.width + b.width) / 2 + 0.1 || Math.abs(dz) > 1.1) continue;
+    const d = Math.hypot(dx, dz); if (d < bestD) { bestD = d; best = b; }
+  }
+  if (best) merge(a, best); else sfx.pop();
+}
+const merging = [];
+function merge(a, b) {
+  const sum = a.value + b.value;
+  if (sum > maxValue) {
+    b.play(shakeAnim(b)); sfx.boing();
+    say(`${b.value} + ${a.value} = ${sum}`, `${maxValue}까지만 만들 수 있어요!`);
+    const dir = a.pos.x >= b.pos.x ? 1 : -1;
+    a.pos.x = b.pos.x + dir * ((a.width + b.width) / 2 + 0.6); a.pos.z = b.pos.z; clampPos(a.pos, a);
+    return;
+  }
+  remove(a); remove(b); a.stopCount(); b.stopCount();
+  const from = a.pos.clone(), to = b.pos.clone().add(new THREE.Vector3(0, b.rows, 0));
+  merging.push({ a, b, sum, from, to, t: 0 });
+}
+function finishMerge(m) {
+  const { a, b, sum } = m, x = b.pos.x, z = b.pos.z, first = b.value, second = a.value;
+  a.dispose(); b.dispose();
+  const made = spawn(sum, x, z);
+  sfx.pop(); setTimeout(() => sfx.number(sum), 120);
+  say(`${first} + ${second} = ${sum}`, `${word(first)} 더하기 ${wordTopic(second)} ${word(sum)}!`);
+  speak(`${word(first)} 더하기 ${wordTopic(second)} ${word(sum)}`);
+  checkMission(made);
+}
+function split(b) {
+  b.stopCount();
+  if (b.value === 1) { b.play(shakeAnim(b)); sfx.boing(); say('1', '하나는 더 나눌 수 없어요!'); return; }
+  const n = b.value, x = b.pos.x, z = b.pos.z;
+  remove(b); b.dispose();
+  const rest = spawn(n - 1, x, z);
+  const side = x + rest.width / 2 + 1.2 <= xMax ? 1 : -1;
+  spawn(1, x + side * (rest.width / 2 + 1), z);
+  sfx.pop();
+  say(`${n} - 1 = ${n - 1}`, `${word(n)}에서 하나를 빼면 ${word(n - 1)}!`);
+  speak(`${word(n)}에서 하나를 빼면 ${word(n - 1)}`);
+  checkMission(rest);
+}
+function spawnOne() {
+  const cubes = blocks.reduce((s, b) => s + b.value, 0);
+  if (cubes >= MAX_CUBES) { sfx.boing(); say('!', '블록이 너무 많아요. 합쳐 볼까요?'); return; }
+  let best = { x: xMin + Math.random() * (xMax - xMin), z: zMin + Math.random() * (zMax - zMin) };
+  for (let i = 0; i < 30; i++) {
+    const p = { x: xMin + 0.5 + Math.random() * (xMax - xMin - 1), z: zMin + Math.random() * (zMax - zMin) };
+    if (blocks.every(b => Math.abs(b.pos.x - p.x) >= b.width / 2 + 0.8 || Math.abs(b.pos.z - p.z) >= 1.2)) { best = p; break; }
+  }
+  spawn(1, best.x, best.z); sfx.pop();
+  if (!speak('하나')) sfx.number(1);
+  say('1', '하나!');
+}
+function resetBoard() {
+  for (const b of blocks) b.dispose(); for (const m of merging) { m.a.dispose(); m.b.dispose(); }
+  blocks = []; merging.length = 0; jobs = []; pressed = null;
+  const zc = (zMin + zMax) / 2;
+  spawn(1, -1.5, zc); spawn(1, 1.5, zc);
+  newTarget();
+}
+function newTarget() {
+  targetDone = false;
+  const c = [];
+  for (let n = 2; n <= maxValue; n++) if (n !== target && !blocks.some(b => b.value === n)) c.push(n);
+  target = c.length ? c[Math.floor(Math.random() * c.length)] : 2 + Math.floor(Math.random() * (maxValue - 1));
+  drawMission();
+}
+function drawMission() {
+  el('mission').hidden = !missionMode;
+  el('mission').textContent = targetDone ? '참 잘했어요!' : `${wordObject(target)} 만들어 봐요! (${target})`;
+}
+function checkMission(made) {
+  if (!missionMode || targetDone || made.value !== target) return;
+  targetDone = true;
+  after(0.5, () => {
+    confetti(made.pos.clone().add(new THREE.Vector3(0, made.rows + 0.5, 0)));
+    made.play(jumpAnim(made, 2, 1.1, true));
+    sfx.success(); say('잘했어요!', `${wordObject(target)} 만들었어요!`);
+    setTimeout(() => speak('잘했어요!'), 700);
+    drawMission();
+  });
+  after(3.5, newTarget);
+}
+let bits = [];
+function confetti(at) {
+  for (let i = 0; i < 40; i++) {
+    const m = part(scene, CUBE, COLORS[1 + Math.floor(Math.random() * 10)], at.x, at.y, at.z, .18, .18, .05);
+    const d = new THREE.Vector3(Math.random() * 2 - 1, Math.random() + 0.8, Math.random() * 2 - 1).normalize();
+    m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+    bits.push({ m, v: d.multiplyScalar(4 + Math.random() * 3), s: new THREE.Vector3(Math.random() * 12 - 6, Math.random() * 12 - 6, 0), life: 1.2 + Math.random() * .6 });
+  }
+}
+function keepApart(dt) {
+  for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) {
+    const a = blocks[i], b = blocks[j];
+    if (a.dragging || b.dragging) continue;
+    const dx = b.pos.x - a.pos.x, need = (a.width + b.width) / 2 + 0.15;
+    if (Math.abs(dx) >= need || Math.abs(b.pos.z - a.pos.z) >= 1.1) continue;
+    const push = Math.min(need - Math.abs(dx), 4 * dt);
+    let dir = dx >= 0 ? 1 : -1; if (Math.abs(dx) < 0.01) dir = i % 2 ? -1 : 1;
+    a.pos.x -= dir * push / 2; b.pos.x += dir * push / 2; clampPos(a.pos, a); clampPos(b.pos, b);
+  }
+}
+
+// ---------- 터치 ----------
+let pressed = null, downX = 0, downY = 0, downT = 0, dragging = false, longDone = false, grab = new THREE.Vector3(), pid = null;
+const canvas = renderer.domElement;
+const toNdc = e => [(e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1];
+canvas.addEventListener('pointerdown', e => {
+  if (pid !== null) return;
+  const [nx, ny] = toNdc(e);
+  ndc.set(nx, ny); ray.setFromCamera(ndc, cam);
+  const hit = ray.intersectObjects(blocks.map(b => b.hit))[0];
+  if (!hit) return;
+  pid = e.pointerId; canvas.setPointerCapture(pid);
+  pressed = hit.object.userData.block; downX = e.clientX; downY = e.clientY; downT = now; dragging = false; longDone = false;
+  const p = floorAt(nx, ny); if (p) grab.set(pressed.pos.x - p.x, 0, pressed.pos.z - p.z);
+});
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerId !== pid || !pressed) return;
+  if (!dragging && Math.hypot(e.clientX - downX, e.clientY - downY) > window.innerHeight * 0.03) {
+    dragging = true; pressed.dragging = true; pressed.stopCount(); sfx.whoosh();
+  }
+  if (dragging) {
+    const [nx, ny] = toNdc(e), p = floorAt(nx, ny);
+    if (p) { pressed.pos.x = p.x + grab.x; pressed.pos.z = p.z + grab.z; clampPos(pressed.pos, pressed); }
+  }
+});
+function release(e) {
+  if (e.pointerId !== pid) return;
+  pid = null;
+  if (!pressed) return;
+  if (dragging) { pressed.dragging = false; onDrop(pressed); }
+  else if (!longDone && e.type === 'pointerup') onTap(pressed);
+  pressed = null; dragging = false;
+}
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+
+el('plus').onclick = spawnOne;
+el('reset').onclick = resetBoard;
+el('max').onclick = () => { maxValue = maxValue === 5 ? MAX : 5; el('max').textContent = maxValue + '까지'; newTarget(); };
+el('mode').onclick = () => { missionMode = !missionMode; el('mode').textContent = missionMode ? '미션 놀이' : '자유 놀이'; if (missionMode) newTarget(); else drawMission(); };
+el('go').onclick = () => {
+  try { audio = new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) { audio = null; }
+  pickVoice();
+  el('start').hidden = true;
+  say('1 + 1 = ?', '하나를 끌어서 다른 하나 위에 놓아 봐요!');
+};
+
+// ---------- 루프 ----------
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t; now += dt;
+  if (pressed && !dragging && !longDone && now - downT > LONG_PRESS) { longDone = true; const b = pressed; pressed = null; split(b); }
+  for (const b of blocks) b.update(dt);
+  for (let i = merging.length - 1; i >= 0; i--) {
+    const m = merging[i]; m.t += dt; m.a.update(dt); m.b.update(dt);
+    const k = THREE.MathUtils.smoothstep(Math.min(1, m.t / 0.25), 0, 1);
+    m.a.pos.lerpVectors(m.from, m.to, k); m.a.pos.y += Math.sin(k * Math.PI);
+    if (m.t >= 0.25) { merging.splice(i, 1); finishMerge(m); }
+  }
+  keepApart(dt);
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const c = bits[i]; c.v.y -= 9 * dt; c.v.multiplyScalar(1 - 1.5 * dt);
+    c.m.position.addScaledVector(c.v, dt); c.m.rotation.x += c.s.x * dt; c.m.rotation.y += c.s.y * dt;
+    c.life -= dt; if (c.life < 0.3) c.m.scale.multiplyScalar(1 - 5 * dt);
+    if (c.life <= 0) { scene.remove(c.m); bits.splice(i, 1); }
+  }
+  const due = jobs.filter(j => j.t <= now); jobs = jobs.filter(j => j.t > now); due.forEach(j => j.f());
+  if (sayTimer > 0) { sayTimer -= dt; if (sayTimer < 0.5) el('say').style.opacity = Math.max(0, sayTimer / 0.5); }
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
+}
+window.addEventListener('resize', fit);
+fit();
+const startGame = () => { resetBoard(); requestAnimationFrame(frame); };
+(document.fonts && document.fonts.load ? document.fonts.load('96px Jua').catch(() => {}) : Promise.resolve()).then(startGame, startGame);
+window.__game = {
+  get blocks() { return blocks; },
+  screenOf(i) { const v = blocks[i].pos.clone(); v.y = 0.5; v.project(cam); return [(v.x + 1) / 2 * window.innerWidth, (1 - v.y) / 2 * window.innerHeight]; },
+};
+})();
+</script>
+</body></html>
